@@ -1,6 +1,7 @@
 /**
  * Procedural Web Audio Engine for Hehe Arcade
- * Generates all laughs, boings, drum hits, and comical FX purely in the browser.
+ * Rock-solid browser audio synthesis with reliable user-gesture unlocking,
+ * direct hardware routing, safe lookahead timing, and punchy audio output.
  */
 
 class AudioEngine {
@@ -8,11 +9,20 @@ class AudioEngine {
   private analyser: AnalyserNode | null = null;
   private masterGain: GainNode | null = null;
   private isMuted: boolean = false;
-  private volume: number = 0.8;
+  private volume: number = 0.9;
   private cosmicOverdrive: boolean = false;
+  private isUnlocked: boolean = false;
 
   constructor() {
-    // Lazily initialized on first user interaction to comply with browser autoplay policies
+    // Attach automatic gesture unlockers on window
+    if (typeof window !== 'undefined') {
+      const unlockHandler = () => {
+        this.unlock();
+      };
+      window.addEventListener('click', unlockHandler, { passive: true });
+      window.addEventListener('touchstart', unlockHandler, { passive: true });
+      window.addEventListener('keydown', unlockHandler, { passive: true });
+    }
   }
 
   public setCosmicOverdrive(enabled: boolean) {
@@ -23,31 +33,62 @@ class AudioEngine {
     return this.cosmicOverdrive;
   }
 
-  private init() {
+  /**
+   * Explicitly unlock audio context on user interaction
+   */
+  public async unlock(): Promise<boolean> {
+    this.ensureContext();
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+        this.isUnlocked = true;
+      } catch (err) {
+        console.warn('AudioContext resume error:', err);
+      }
+    } else if (this.ctx && this.ctx.state === 'running') {
+      this.isUnlocked = true;
+    }
+    return this.isUnlocked;
+  }
+
+  public isRunning(): boolean {
+    return !!(this.ctx && this.ctx.state === 'running');
+  }
+
+  private ensureContext() {
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioCtx) return;
+
       this.ctx = new AudioCtx();
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 128;
+
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : this.volume, this.ctx.currentTime);
+      this.masterGain.gain.value = this.isMuted ? 0 : this.volume;
+
+      // Connect both directly to destination and to analyser for visualization
+      this.masterGain.connect(this.ctx.destination);
       this.masterGain.connect(this.analyser);
-      this.analyser.connect(this.ctx.destination);
     }
+
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 
   public getAnalyser(): AnalyserNode | null {
-    this.init();
+    this.ensureContext();
     return this.analyser;
   }
 
   public setMuted(muted: boolean) {
     this.isMuted = muted;
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.setValueAtTime(muted ? 0 : this.volume, this.ctx.currentTime);
+    if (this.masterGain) {
+      this.masterGain.gain.value = muted ? 0 : this.volume;
     }
   }
 
@@ -57,8 +98,8 @@ class AudioEngine {
 
   public setVolume(vol: number) {
     this.volume = Math.max(0, Math.min(1, vol));
-    if (this.masterGain && this.ctx && !this.isMuted) {
-      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+    if (this.masterGain && !this.isMuted) {
+      this.masterGain.gain.value = this.volume;
     }
   }
 
@@ -74,11 +115,23 @@ class AudioEngine {
     pitchMod: number = 1.0,
     speedMod: number = 1.0
   ) {
-    this.init();
+    this.ensureContext();
     if (!this.ctx || !this.masterGain) return;
 
-    const t = this.ctx.currentTime;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(() => {
+        this.executePlay(soundId, pitchMod, speedMod);
+      });
+    } else {
+      this.executePlay(soundId, pitchMod, speedMod);
+    }
+  }
 
+  private executePlay(
+    soundId: string,
+    pitchMod: number,
+    speedMod: number
+  ) {
     switch (soundId) {
       case 'snicker':
         this.playGiggle(pitchMod * 1.1, speedMod, 4, 380, 520, 'triangle');
@@ -136,69 +189,11 @@ class AudioEngine {
   }
 
   /**
-   * Cosmic Singularity laugh (HEHE to the power of 100,000)
-   * 10 layered harmonic oscillators + celestial choir + space delay
+   * Safe schedule start time: Lookahead by 30ms to prevent audio glitches
    */
-  public playCosmicSingularity(pitch: number = 1.0) {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    // Harmonic series multipliers representing cosmic resonance
-    const harmonics = [1, 1.25, 1.5, 1.875, 2.25, 2.8125, 3.5];
-
-    harmonics.forEach((h, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      const filter = this.ctx!.createBiquadFilter();
-
-      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
-      const base = 261.63 * pitch * h;
-      osc.frequency.setValueAtTime(base, now);
-      // Gentle cosmic vibrato
-      osc.frequency.linearRampToValueAtTime(base * 1.08, now + 0.3);
-      osc.frequency.exponentialRampToValueAtTime(base * 0.96, now + 1.2);
-
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(3200, now);
-      filter.Q.setValueAtTime(3.0, now);
-
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(0.06, now + 0.15 + idx * 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain!);
-
-      osc.start(now + idx * 0.03);
-      osc.stop(now + 1.5);
-    });
-
-    // Layer rapid celestial laughs on top
-    this.playGiggle(pitch * 2.0, 1.8, 8, 800, 1600, 'sine');
-  }
-
-  /**
-   * Shimmering overtone chime for Cosmic Overdrive mode
-   */
-  private playCosmicShimmer(pitch: number) {
-    if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const notes = [1046.5, 1318.5, 1567.98, 2093.0]; // High C major arpeggio
-    notes.forEach((freq, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq * pitch, now + idx * 0.05);
-
-      gain.gain.setValueAtTime(0.04, now + idx * 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.3);
-
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
-
-      osc.start(now + idx * 0.05);
-      osc.stop(now + idx * 0.05 + 0.35);
-    });
+  private getStartTime(): number {
+    if (!this.ctx) return 0;
+    return this.ctx.currentTime + 0.03;
   }
 
   /**
@@ -213,35 +208,26 @@ class AudioEngine {
     waveType: OscillatorType
   ) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const burstDuration = 0.08 / speed;
-    const gap = 0.06 / speed;
+    const now = this.getStartTime();
+    const burstDuration = 0.1 / Math.max(0.2, speed);
+    const gap = 0.07 / Math.max(0.2, speed);
 
     for (let i = 0; i < burstCount; i++) {
       const startTime = now + i * (burstDuration + gap);
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
 
       osc.type = waveType;
-      // Pitch inflection: jumps up then slightly glides down per "he"
       const freq = (baseFreq + (peakFreq - baseFreq) * (i / burstCount)) * pitch;
       osc.frequency.setValueAtTime(freq * 0.9, startTime);
-      osc.frequency.exponentialRampToValueAtTime(freq * 1.25, startTime + burstDuration * 0.3);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.95, startTime + burstDuration);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * 1.3), startTime + burstDuration * 0.4);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * 0.95), startTime + burstDuration);
 
-      // Bandpass formant filter for human vowel-like warmth
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(freq * 1.8, startTime);
-      filter.Q.setValueAtTime(2.5, startTime);
-
-      // Volume envelope
       gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.25, startTime + burstDuration * 0.2);
+      gain.gain.linearRampToValueAtTime(0.65, startTime + burstDuration * 0.25);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + burstDuration);
 
-      osc.connect(filter);
-      filter.connect(gain);
+      osc.connect(gain);
       gain.connect(this.masterGain);
 
       osc.start(startTime);
@@ -254,10 +240,10 @@ class AudioEngine {
    */
   private playEvilLaugh(pitch: number, speed: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const notes = [220, 196, 174, 146, 130]; // Descending sinister minor scale
-    const burstDuration = 0.16 / speed;
-    const gap = 0.08 / speed;
+    const now = this.getStartTime();
+    const notes = [220, 196, 174, 146, 130];
+    const burstDuration = 0.18 / Math.max(0.2, speed);
+    const gap = 0.09 / Math.max(0.2, speed);
 
     notes.forEach((freq, idx) => {
       const startTime = now + idx * (burstDuration + gap);
@@ -265,34 +251,27 @@ class AudioEngine {
       const osc2 = this.ctx!.createOscillator();
       const sub = this.ctx!.createOscillator();
       const gain = this.ctx!.createGain();
-      const filter = this.ctx!.createBiquadFilter();
 
       osc1.type = 'sawtooth';
       osc2.type = 'sawtooth';
       sub.type = 'sine';
 
-      const targetFreq = freq * pitch * 0.75;
+      const targetFreq = freq * pitch * 0.8;
       osc1.frequency.setValueAtTime(targetFreq, startTime);
-      osc1.frequency.exponentialRampToValueAtTime(targetFreq * 0.88, startTime + burstDuration);
+      osc1.frequency.exponentialRampToValueAtTime(Math.max(20, targetFreq * 0.85), startTime + burstDuration);
 
-      osc2.frequency.setValueAtTime(targetFreq * 1.01, startTime); // Detuned for sinister unison
-      osc2.frequency.exponentialRampToValueAtTime(targetFreq * 0.89, startTime + burstDuration);
+      osc2.frequency.setValueAtTime(targetFreq * 1.02, startTime);
+      osc2.frequency.exponentialRampToValueAtTime(Math.max(20, targetFreq * 0.86), startTime + burstDuration);
 
-      sub.frequency.setValueAtTime(targetFreq * 0.5, startTime);
-
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(800 * pitch, startTime);
-      filter.frequency.exponentialRampToValueAtTime(300, startTime + burstDuration);
-      filter.Q.setValueAtTime(4.0, startTime);
+      sub.frequency.setValueAtTime(Math.max(20, targetFreq * 0.5), startTime);
 
       gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.linearRampToValueAtTime(0.35, startTime + burstDuration * 0.2);
+      gain.gain.linearRampToValueAtTime(0.6, startTime + burstDuration * 0.2);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + burstDuration);
 
-      osc1.connect(filter);
-      osc2.connect(filter);
+      osc1.connect(gain);
+      osc2.connect(gain);
       sub.connect(gain);
-      filter.connect(gain);
       gain.connect(this.masterGain!);
 
       osc1.start(startTime);
@@ -311,9 +290,9 @@ class AudioEngine {
    */
   private playRobotLaugh(pitch: number, speed: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
     const steps = 8;
-    const stepDuration = 0.06 / speed;
+    const stepDuration = 0.07 / Math.max(0.2, speed);
 
     for (let i = 0; i < steps; i++) {
       const startTime = now + i * stepDuration;
@@ -321,10 +300,10 @@ class AudioEngine {
       const gain = this.ctx.createGain();
 
       osc.type = 'square';
-      const base = ((i % 2 === 0 ? 440 : 660) + (i * 30)) * pitch;
+      const base = ((i % 2 === 0 ? 440 : 660) + i * 30) * pitch;
       osc.frequency.setValueAtTime(base, startTime);
 
-      gain.gain.setValueAtTime(0.18, startTime);
+      gain.gain.setValueAtTime(0.35, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + stepDuration * 0.85);
 
       osc.connect(gain);
@@ -340,8 +319,9 @@ class AudioEngine {
    */
   private playWheeze(pitch: number, speed: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * (0.4 / speed);
+    const now = this.getStartTime();
+    const duration = 0.45 / Math.max(0.2, speed);
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
     const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -354,25 +334,25 @@ class AudioEngine {
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.frequency.setValueAtTime(1400 * pitch, now);
-    filter.frequency.linearRampToValueAtTime(1900 * pitch, now + (0.2 / speed));
-    filter.frequency.linearRampToValueAtTime(1100 * pitch, now + (0.4 / speed));
-    filter.Q.setValueAtTime(5, now);
+    filter.frequency.linearRampToValueAtTime(1900 * pitch, now + duration * 0.5);
+    filter.frequency.linearRampToValueAtTime(1100 * pitch, now + duration);
+    filter.Q.setValueAtTime(3, now);
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.28, now + 0.08);
-    gain.gain.linearRampToValueAtTime(0.15, now + 0.2);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + (0.4 / speed));
+    gain.gain.linearRampToValueAtTime(0.5, now + 0.08);
+    gain.gain.linearRampToValueAtTime(0.3, now + duration * 0.6);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     whiteNoise.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain);
 
     whiteNoise.start(now);
-    whiteNoise.stop(now + (0.4 / speed) + 0.05);
+    whiteNoise.stop(now + duration + 0.05);
 
-    // Add a vocal squeak inside the wheeze
-    this.playCartoonSqueak(pitch * 1.3);
+    // Accompanying vocal squeak
+    this.playCartoonSqueak(pitch * 1.2);
   }
 
   /**
@@ -380,22 +360,22 @@ class AudioEngine {
    */
   private playBassBoof(pitch: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(160 * pitch, now);
-    osc.frequency.exponentialRampToValueAtTime(38 * pitch, now + 0.35);
+    osc.frequency.setValueAtTime(180 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, 42 * pitch), now + 0.35);
 
-    gain.gain.setValueAtTime(0.5, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+    gain.gain.setValueAtTime(0.75, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
     osc.start(now);
-    osc.stop(now + 0.42);
+    osc.stop(now + 0.48);
   }
 
   /**
@@ -403,22 +383,22 @@ class AudioEngine {
    */
   private playCartoonSqueak(pitch: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(400 * pitch, now);
-    osc.frequency.exponentialRampToValueAtTime(1600 * pitch, now + 0.12);
+    osc.frequency.setValueAtTime(450 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(1800 * pitch, now + 0.15);
 
-    gain.gain.setValueAtTime(0.22, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    gain.gain.setValueAtTime(0.5, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
     osc.start(now);
-    osc.stop(now + 0.15);
+    osc.stop(now + 0.2);
   }
 
   /**
@@ -426,7 +406,7 @@ class AudioEngine {
    */
   private playCartoonBoing(pitch: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
     const osc = this.ctx.createOscillator();
     const lfo = this.ctx.createOscillator();
     const lfoGain = this.ctx.createGain();
@@ -442,19 +422,19 @@ class AudioEngine {
     lfo.connect(osc.frequency);
 
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(180 * pitch, now);
-    osc.frequency.exponentialRampToValueAtTime(520 * pitch, now + 0.35);
+    osc.frequency.setValueAtTime(190 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(560 * pitch, now + 0.38);
 
-    gain.gain.setValueAtTime(0.28, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+    gain.gain.setValueAtTime(0.55, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
     lfo.start(now);
     osc.start(now);
-    lfo.stop(now + 0.45);
-    osc.stop(now + 0.45);
+    lfo.stop(now + 0.48);
+    osc.stop(now + 0.48);
   }
 
   /**
@@ -462,14 +442,11 @@ class AudioEngine {
    */
   public playBaDumTss() {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
 
-    // Ba (Tom 1)
-    this.playDrumTom(160, now, 0.12);
-    // Dum (Tom 2)
-    this.playDrumTom(120, now + 0.16, 0.15);
-    // Tss (Cymbal rimshot)
-    this.playCymbal(now + 0.34);
+    this.playDrumTom(160, now, 0.14);
+    this.playDrumTom(120, now + 0.18, 0.16);
+    this.playCymbal(now + 0.38);
   }
 
   private playDrumTom(freq: number, time: number, duration: number) {
@@ -479,9 +456,9 @@ class AudioEngine {
 
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, time);
-    osc.frequency.exponentialRampToValueAtTime(freq * 0.4, time + duration);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq * 0.4), time + duration);
 
-    gain.gain.setValueAtTime(0.35, time);
+    gain.gain.setValueAtTime(0.6, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     osc.connect(gain);
@@ -493,8 +470,8 @@ class AudioEngine {
 
   private playCymbal(time: number) {
     if (!this.ctx || !this.masterGain) return;
-    const duration = 0.4;
-    const bufferSize = this.ctx.sampleRate * duration;
+    const duration = 0.5;
+    const bufferSize = Math.floor(this.ctx.sampleRate * duration);
     const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -509,7 +486,7 @@ class AudioEngine {
     filter.frequency.setValueAtTime(6000, time);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.3, time);
+    gain.gain.setValueAtTime(0.5, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
     whiteNoise.connect(filter);
@@ -525,8 +502,8 @@ class AudioEngine {
    */
   private playFanfare(pitch: number) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
-    const triad = [261.63, 329.63, 392.00, 523.25]; // C major chord
+    const now = this.getStartTime();
+    const triad = [261.63, 329.63, 392.0, 523.25];
 
     triad.forEach((freq, idx) => {
       const osc = this.ctx!.createOscillator();
@@ -535,14 +512,14 @@ class AudioEngine {
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(freq * pitch, now);
 
-      gain.gain.setValueAtTime(0.08, now + idx * 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      gain.gain.setValueAtTime(0.18, now + idx * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
 
       osc.connect(gain);
       gain.connect(this.masterGain!);
 
       osc.start(now + idx * 0.03);
-      osc.stop(now + 0.65);
+      osc.stop(now + 0.7);
     });
   }
 
@@ -551,22 +528,22 @@ class AudioEngine {
    */
   public playPop(pitch: number = 1.0) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(320 * pitch, now);
-    osc.frequency.exponentialRampToValueAtTime(880 * pitch, now + 0.04);
+    osc.frequency.setValueAtTime(340 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(950 * pitch, now + 0.06);
 
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    gain.gain.setValueAtTime(0.45, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
     osc.start(now);
-    osc.stop(now + 0.07);
+    osc.stop(now + 0.09);
   }
 
   /**
@@ -574,35 +551,96 @@ class AudioEngine {
    */
   public playBlip(pitch: number = 1.0) {
     if (!this.ctx || !this.masterGain) return;
-    const now = this.ctx.currentTime;
+    const now = this.getStartTime();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(650 * pitch, now);
-    osc.frequency.exponentialRampToValueAtTime(450 * pitch, now + 0.04);
+    osc.frequency.setValueAtTime(700 * pitch, now);
+    osc.frequency.exponentialRampToValueAtTime(480 * pitch, now + 0.06);
 
-    gain.gain.setValueAtTime(0.12, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
     osc.start(now);
-    osc.stop(now + 0.05);
+    osc.stop(now + 0.08);
   }
 
   /**
-   * Uses SpeechSynthesis to say custom text in a funny way if supported
+   * Cosmic Singularity laugh (HEHE to the power of 100,000)
+   */
+  public playCosmicSingularity(pitch: number = 1.0) {
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.getStartTime();
+    const harmonics = [1, 1.25, 1.5, 1.875, 2.25, 2.8125, 3.5];
+
+    harmonics.forEach((h, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      const base = 261.63 * pitch * h;
+      osc.frequency.setValueAtTime(base, now);
+      osc.frequency.linearRampToValueAtTime(base * 1.08, now + 0.3);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, base * 0.96), now + 1.2);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.15 + idx * 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now + idx * 0.03);
+      osc.stop(now + 1.5);
+    });
+
+    this.playGiggle(pitch * 2.0, 1.6, 8, 800, 1600, 'sine');
+  }
+
+  /**
+   * Shimmering overtone chime for Cosmic Overdrive mode
+   */
+  private playCosmicShimmer(pitch: number) {
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.getStartTime();
+    const notes = [1046.5, 1318.5, 1567.98, 2093.0];
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq * pitch, now + idx * 0.05);
+
+      gain.gain.setValueAtTime(0.12, now + idx * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.3);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now + idx * 0.05);
+      osc.stop(now + idx * 0.05 + 0.35);
+    });
+  }
+
+  /**
+   * Uses SpeechSynthesis to say custom text in a funny way
    */
   public speakHehe(phrase: string, rate: number = 1.3, pitch: number = 1.5) {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(phrase);
-      utterance.rate = Math.max(0.5, Math.min(2.5, rate));
-      utterance.pitch = Math.max(0.2, Math.min(2.0, pitch));
-      utterance.volume = this.isMuted ? 0 : this.volume;
-      window.speechSynthesis.speak(utterance);
+      try {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume();
+        const utterance = new SpeechSynthesisUtterance(phrase);
+        utterance.rate = Math.max(0.5, Math.min(2.5, rate));
+        utterance.pitch = Math.max(0.2, Math.min(2.0, pitch));
+        utterance.volume = this.isMuted ? 0 : this.volume;
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn('Speech synthesis error:', err);
+      }
     }
   }
 }

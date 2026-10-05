@@ -106,7 +106,20 @@ export const TopBar: React.FC<Props> = ({
       </nav>
 
       {/* Zone 3: 1–2 primary actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          onClick={() => {
+            audioEngine.unlock();
+            audioEngine.play('snicker', 1.0);
+            fireConfetti(window.innerWidth / 2, 80, 15, false);
+          }}
+          className="px-3 py-1.5 text-xs font-semibold text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+          title="Click to test audio output"
+        >
+          <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+          <span>Test Sound</span>
+        </button>
+
         <button
           onClick={() => {
             const next = !cosmicMode;

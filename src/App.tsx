@@ -16,9 +16,9 @@ import { fireConfetti } from './utils/confetti';
 import { Music, MousePointerClick, Activity, Smile, Grid, Atom } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('cosmic');
+  const [activeTab, setActiveTab] = useState<string>('soundboard');
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [cosmicMode, setCosmicMode] = useState<boolean>(true);
+  const [cosmicMode, setCosmicMode] = useState<boolean>(false);
   const [easterEggActive, setEasterEggActive] = useState<boolean>(false);
 
   // Initialize cosmic mode in audio engine on load
