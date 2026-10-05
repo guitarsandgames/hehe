@@ -1,0 +1,6 @@
+{
+  "name": "Hehe Arcade",
+  "description": "The interactive laugh synthesizer, mischief playground, evasive button arcade, and comedy sound machine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
