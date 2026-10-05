@@ -35,6 +35,7 @@ const PADS: SoundPad[] = [
   { id: 'squeak', name: 'Toy Squeak', sub: 'Rubber ducky', key: 'Q', color: 'from-amber-400/20 to-yellow-500/10 hover:border-amber-300', border: 'border-amber-400/30', icon: '🐥' },
   { id: 'rimshot', name: 'Ba-Dum Tss', sub: 'Classic punchline', key: 'W', color: 'from-rose-500/20 to-purple-600/10 hover:border-rose-400', border: 'border-rose-500/30', icon: '🥁' },
   { id: 'horn', name: 'Fanfare', sub: 'Victory horn', key: 'E', color: 'from-violet-500/20 to-fuchsia-600/10 hover:border-violet-400', border: 'border-violet-500/30', icon: '🎺' },
+  { id: 'cosmic', name: 'HEHE¹⁰⁰⁰⁰⁰', sub: 'Cosmic Singularity', key: 'R', color: 'from-fuchsia-600/40 via-purple-700/30 to-amber-500/20 hover:border-fuchsia-300', border: 'border-fuchsia-400/60', icon: '🌌' },
 ];
 
 export const SoundboardTab: React.FC = () => {

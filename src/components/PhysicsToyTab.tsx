@@ -35,7 +35,7 @@ const COLORS = [
 
 export const PhysicsToyTab: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [gravityMode, setGravityMode] = useState<'normal' | 'zero' | 'inverted' | 'attract'>('normal');
+  const [gravityMode, setGravityMode] = useState<'normal' | 'zero' | 'inverted' | 'attract' | 'singularity'>('normal');
   const [bounciness, setBounciness] = useState<number>(0.85);
   const [ballCount, setBallCount] = useState<number>(14);
 
@@ -87,13 +87,41 @@ export const PhysicsToyTab: React.FC = () => {
         gY = -0.35;
       }
 
+      if (gravityMode === 'singularity') {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, 120);
+        grad.addColorStop(0, 'rgba(168, 85, 247, 0.4)');
+        grad.addColorStop(0.5, 'rgba(236, 72, 153, 0.2)');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 120, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = '24px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🌀', cx, cy);
+      }
+
       const balls = ballsRef.current;
 
       for (let i = 0; i < balls.length; i++) {
         const b = balls[i];
 
         // Gravity or Attractor
-        if (gravityMode === 'attract') {
+        if (gravityMode === 'singularity') {
+          const centerX = canvas.width / 2;
+          const centerY = canvas.height / 2;
+          const dx = centerX - b.x;
+          const dy = centerY - b.y;
+          const dist = Math.max(30, Math.sqrt(dx * dx + dy * dy));
+          // Tangential spiral force + inward pull
+          const angle = Math.atan2(dy, dx);
+          b.vx += (dx / dist) * 0.8 + Math.cos(angle + Math.PI / 2) * 0.9;
+          b.vy += (dy / dist) * 0.8 + Math.sin(angle + Math.PI / 2) * 0.9;
+        } else if (gravityMode === 'attract') {
           const dx = mouseRef.current.x - b.x;
           const dy = mouseRef.current.y - b.y;
           const dist = Math.max(20, Math.sqrt(dx * dx + dy * dy));
@@ -286,13 +314,14 @@ export const PhysicsToyTab: React.FC = () => {
         </div>
 
         {/* Gravity Modes */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 flex-wrap">
           {(
             [
               { id: 'normal', label: 'Earth (Down)' },
               { id: 'zero', label: 'Zero-G (Float)' },
               { id: 'inverted', label: 'Inverted (Up)' },
               { id: 'attract', label: 'Vortex (Mouse)' },
+              { id: 'singularity', label: 'HEHE¹⁰⁰⁰⁰⁰ Singularity' },
             ] as const
           ).map((m) => (
             <button

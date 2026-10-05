@@ -10,14 +10,21 @@ import { EvadeButtonGame } from './components/EvadeButtonGame';
 import { BeatSequencerTab } from './components/BeatSequencerTab';
 import { PhysicsToyTab } from './components/PhysicsToyTab';
 import { MischiefPunBoxTab } from './components/MischiefPunBoxTab';
+import { CosmicSingularityTab } from './components/CosmicSingularityTab';
 import { audioEngine } from './utils/audioEngine';
 import { fireConfetti } from './utils/confetti';
-import { Music, MousePointerClick, Activity, Smile, Grid } from 'lucide-react';
+import { Music, MousePointerClick, Activity, Smile, Grid, Atom } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('soundboard');
+  const [activeTab, setActiveTab] = useState<string>('cosmic');
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [cosmicMode, setCosmicMode] = useState<boolean>(true);
   const [easterEggActive, setEasterEggActive] = useState<boolean>(false);
+
+  // Initialize cosmic mode in audio engine on load
+  useEffect(() => {
+    audioEngine.setCosmicOverdrive(cosmicMode);
+  }, [cosmicMode]);
 
   // Konami Code listener (↑ ↑ ↓ ↓ ← → ← → B A)
   useEffect(() => {
@@ -63,10 +70,21 @@ export default function App() {
         setActiveTab={setActiveTab}
         isMuted={isMuted}
         setIsMuted={setIsMuted}
+        cosmicMode={cosmicMode}
+        setCosmicMode={setCosmicMode}
       />
 
       {/* Mobile Tab Switcher */}
       <div className="md:hidden flex items-center justify-around bg-slate-900 border-b border-slate-800 px-2 py-2 overflow-x-auto gap-1">
+        <button
+          onClick={() => setActiveTab('cosmic')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            activeTab === 'cosmic' ? 'bg-purple-500 text-white font-bold' : 'text-purple-300'
+          }`}
+        >
+          <Atom className="w-3.5 h-3.5" />
+          HEHE¹⁰⁰⁰⁰⁰
+        </button>
         <button
           onClick={() => setActiveTab('soundboard')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
@@ -122,6 +140,12 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === 'cosmic' && (
+          <CosmicSingularityTab
+            cosmicMode={cosmicMode}
+            setCosmicMode={setCosmicMode}
+          />
+        )}
         {activeTab === 'soundboard' && <SoundboardTab />}
         {activeTab === 'evade' && <EvadeButtonGame />}
         {activeTab === 'sequencer' && <BeatSequencerTab />}

@@ -9,9 +9,18 @@ class AudioEngine {
   private masterGain: GainNode | null = null;
   private isMuted: boolean = false;
   private volume: number = 0.8;
+  private cosmicOverdrive: boolean = false;
 
   constructor() {
     // Lazily initialized on first user interaction to comply with browser autoplay policies
+  }
+
+  public setCosmicOverdrive(enabled: boolean) {
+    this.cosmicOverdrive = enabled;
+  }
+
+  public getCosmicOverdrive(): boolean {
+    return this.cosmicOverdrive;
   }
 
   private init() {
@@ -113,10 +122,83 @@ class AudioEngine {
       case 'click':
         this.playBlip(pitchMod);
         break;
+      case 'cosmic':
+        this.playCosmicSingularity(pitchMod);
+        break;
       default:
         this.playGiggle(pitchMod, speedMod, 4, 400, 560, 'sine');
         break;
     }
+
+    if (this.cosmicOverdrive && soundId !== 'cosmic') {
+      this.playCosmicShimmer(pitchMod);
+    }
+  }
+
+  /**
+   * Cosmic Singularity laugh (HEHE to the power of 100,000)
+   * 10 layered harmonic oscillators + celestial choir + space delay
+   */
+  public playCosmicSingularity(pitch: number = 1.0) {
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    // Harmonic series multipliers representing cosmic resonance
+    const harmonics = [1, 1.25, 1.5, 1.875, 2.25, 2.8125, 3.5];
+
+    harmonics.forEach((h, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      const filter = this.ctx!.createBiquadFilter();
+
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      const base = 261.63 * pitch * h;
+      osc.frequency.setValueAtTime(base, now);
+      // Gentle cosmic vibrato
+      osc.frequency.linearRampToValueAtTime(base * 1.08, now + 0.3);
+      osc.frequency.exponentialRampToValueAtTime(base * 0.96, now + 1.2);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(3200, now);
+      filter.Q.setValueAtTime(3.0, now);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.06, now + 0.15 + idx * 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now + idx * 0.03);
+      osc.stop(now + 1.5);
+    });
+
+    // Layer rapid celestial laughs on top
+    this.playGiggle(pitch * 2.0, 1.8, 8, 800, 1600, 'sine');
+  }
+
+  /**
+   * Shimmering overtone chime for Cosmic Overdrive mode
+   */
+  private playCosmicShimmer(pitch: number) {
+    if (!this.ctx || !this.masterGain) return;
+    const now = this.ctx.currentTime;
+    const notes = [1046.5, 1318.5, 1567.98, 2093.0]; // High C major arpeggio
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq * pitch, now + idx * 0.05);
+
+      gain.gain.setValueAtTime(0.04, now + idx * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.3);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now + idx * 0.05);
+      osc.stop(now + idx * 0.05 + 0.35);
+    });
   }
 
   /**

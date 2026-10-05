@@ -8,6 +8,8 @@ interface Props {
   setActiveTab: (tab: string) => void;
   isMuted: boolean;
   setIsMuted: (muted: boolean) => void;
+  cosmicMode: boolean;
+  setCosmicMode: (v: boolean) => void;
 }
 
 export const TopBar: React.FC<Props> = ({
@@ -15,6 +17,8 @@ export const TopBar: React.FC<Props> = ({
   setActiveTab,
   isMuted,
   setIsMuted,
+  cosmicMode,
+  setCosmicMode,
 }) => {
   const toggleMute = () => {
     const nextMute = !isMuted;
@@ -86,10 +90,43 @@ export const TopBar: React.FC<Props> = ({
         >
           Mischief Deck
         </button>
+        <button
+          onClick={() => {
+            setActiveTab('cosmic');
+            audioEngine.playCosmicSingularity(1.0);
+          }}
+          className={`hover:text-white transition-colors cursor-pointer whitespace-nowrap ${
+            activeTab === 'cosmic'
+              ? 'text-purple-400 font-bold underline underline-offset-8 decoration-2'
+              : 'text-purple-400/80 hover:text-purple-300'
+          }`}
+        >
+          HEHE¹⁰⁰⁰⁰⁰
+        </button>
       </nav>
 
       {/* Zone 3: 1–2 primary actions */}
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => {
+            const next = !cosmicMode;
+            setCosmicMode(next);
+            audioEngine.setCosmicOverdrive(next);
+            if (next) {
+              audioEngine.playCosmicSingularity(1.1);
+              fireConfetti(window.innerWidth / 2, window.innerHeight / 2, 40, true);
+            }
+          }}
+          className={`hidden sm:flex px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer whitespace-nowrap items-center gap-1.5 ${
+            cosmicMode
+              ? 'bg-purple-600/30 text-purple-300 border-purple-500/60 shadow-sm'
+              : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+          }`}
+          title="Toggle 100,000x Overdrive Mode"
+        >
+          <span>100,000x</span>
+        </button>
+
         <button
           onClick={toggleMute}
           className="p-2 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-800 transition-colors cursor-pointer"
